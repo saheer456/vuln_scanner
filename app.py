@@ -134,15 +134,7 @@ SENSITIVE_PATHS = [
     "/console",
 ]
 
-COMMON_CREDENTIALS = [
-    ("admin", "admin"),
-    ("admin", "password"),
-    ("admin", "123456"),
-    ("root", "root"),
-    ("user", "user"),
-    ("test", "test"),
-    ("administrator", "administrator"),
-]
+
 def extract_forms(url):
     forms = []
     try:
@@ -169,7 +161,7 @@ def extract_forms(url):
             })
 
     except Exception as e:
-        print("Form error:", e)
+        print("Form extraction error:", e)
 
     return forms
 
@@ -186,16 +178,17 @@ def check_sql_injection(url):
 
             try:
                 res = requests.post(target, data=data, timeout=10, verify=False)
-                if "sql" in res.text.lower():
+                response_text = res.text.lower()
+                if any(re.search(pattern, response_text) for pattern in SQL_ERROR_PATTERNS):
                     findings.append({
                         "type": "SQL Injection",
                         "severity": "critical",
                         "location": target,
                         "payload": payload,
-                        "detail": "SQL error detected"
+                        "detail": "SQL error pattern detected in response"
                     })
-            except:
-                pass
+            except Exception as e:
+                print("SQL check error:", e)
 
     return findings
 
@@ -218,10 +211,10 @@ def check_xss(url):
                         "severity": "high",
                         "location": target,
                         "payload": payload,
-                        "detail": "Payload reflected"
+                        "detail": "Payload reflected in response"
                     })
-            except:
-                pass
+            except Exception as e:
+                print("XSS check error:", e)
 
     return findings
 
@@ -240,8 +233,8 @@ def check_broken_auth(url):
                 "payload": "",
                 "detail": f"Missing headers: {missing}"
             })
-    except:
-        pass
+    except Exception as e:
+        print("Auth check error:", e)
 
     return findings
 

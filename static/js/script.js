@@ -73,10 +73,15 @@ function renderDashboard(data) {
   document.getElementById('dashboard').classList.add('show');
 
   // Meta bar
+  const safe = (str) => {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  };
   document.getElementById('metaBar').innerHTML = `
-    <div>TARGET <span>${meta.url}</span></div>
-    <div>SCANNED <span>${meta.timestamp}</span></div>
-    <div>DURATION <span>${meta.duration}s</span></div>
+    <div>TARGET <span>${safe(meta.url)}</span></div>
+    <div>SCANNED <span>${safe(meta.timestamp)}</span></div>
+    <div>DURATION <span>${safe(meta.duration)}s</span></div>
     <div>ISSUES <span>${summary.total}</span></div>
   `;
 
