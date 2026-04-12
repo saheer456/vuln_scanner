@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VulnScan — Web Vulnerability Scanner</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet"/>
+
+  <!-- Chart.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</head>
+<body>
+  <div class="wrapper">
+
+    <!-- ── 1. Header ── -->
+    <header>
+      <div class="logo-icon">🛡</div>
+      <div>
+        <h1>Vuln<span>Scan</span></h1>
+        <p class="subtitle">// WEB APPLICATION VULNERABILITY SCANNER</p>
+      </div>
+    </header>
+
+    <!-- ── 2. Scanner Input Card ── -->
+    <div class="scanner-card">
+      <div class="input-row">
+        <input class="url-input" id="urlInput" type="text" placeholder="https://target-website.com"/>
+        <button class="scan-btn" id="scanBtn" onclick="startScan()">▶ SCAN</button>
+      </div>
+
+      <!-- Checkboxes -->
+      <div class="checks-row">
+        <label class="check-label">
+          <input type="checkbox" value="sql" checked/> 💉 SQL Injection
+        </label>
+        <label class="check-label">
+          <input type="checkbox" value="xss" checked/> ⚡ XSS
+        </label>
+        <label class="check-label">
+          <input type="checkbox" value="auth" checked/> 🔑 Broken Auth
+        </label>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progressFill"></div>
+        </div>
+        <p class="progress-status" id="progressStatus">Initializing...</p>
+      </div>
+    </div>
+
+    <!-- ── 3. Results Dashboard ── -->
+    <div id="dashboard">
+
+      <!-- Scan metadata bar -->
+      <div class="meta-bar" id="metaBar"></div>
+
+      <!-- Summary stat cards -->
+      <div class="stats-row">
+        <div class="stat-card total">
+          <div class="stat-label">Total Issues</div>
+          <div class="stat-value" id="statTotal">0</div>
+          <div class="stat-sub">vulnerabilities found</div>
+        </div>
+        <div class="stat-card critical-c">
+          <div class="stat-label">Critical</div>
+          <div class="stat-value" id="statCritical">0</div>
+          <div class="stat-sub">immediate action needed</div>
+        </div>
+        <div class="stat-card high-c">
+          <div class="stat-label">High</div>
+          <div class="stat-value" id="statHigh">0</div>
+          <div class="stat-sub">high severity</div>
+        </div>
+        <div class="stat-card risk">
+          <div class="stat-label">Risk Score</div>
+          <div class="stat-value" id="statRisk">0</div>
+          <div class="stat-sub">out of 100</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-row">
+        <div class="chart-card">
+          <p class="chart-title">// Severity Distribution</p>
+          <div class="chart-wrap">
+            <canvas id="sevChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <p class="chart-title">// Vulnerability Types</p>
+          <div class="chart-wrap">
+            <canvas id="typeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Findings list -->
+      <div class="findings-card">
+        <div class="findings-header">
+          <p class="findings-title">// Findings</p>
+          <div class="filter-row">
+            <button class="filter-btn active" onclick="filterFindings('all', this)">All</button>
+            <button class="filter-btn" onclick="filterFindings('critical', this)">Critical</button>
+            <button class="filter-btn" onclick="filterFindings('high', this)">High</button>
+            <button class="filter-btn" onclick="filterFindings('medium', this)">Medium</button>
+          </div>
+        </div>
+        <div id="findingsList"></div>
+      </div>
+
+    </div><!-- /#dashboard -->
+  </div><!-- /.wrapper -->
+
+  <script>
+    /* JavaScript goes here — later step */
+  </script>
+</body>
+</html>
