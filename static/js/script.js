@@ -1,6 +1,12 @@
 let allFindings = [];
 let sevChart, typeChart;
 
+function escapeHtml(value) {
+  const d = document.createElement('div');
+  d.textContent = value ?? '';
+  return d.innerHTML;
+}
+
 async function startScan() {
   const url = document.getElementById('urlInput').value.trim();
   if (!url) { alert('Please enter a target URL'); return; }
@@ -46,7 +52,11 @@ async function startScan() {
       body: JSON.stringify({ url, checks })
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `Scan failed with HTTP ${response.status}`);
+    }
+
     clearInterval(ticker);
     fill.style.width = '100%';
     status.textContent = '✅ Scan complete!';
@@ -73,15 +83,10 @@ function renderDashboard(data) {
   document.getElementById('dashboard').classList.add('show');
 
   // Meta bar
-  const safe = (str) => {
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
-  };
   document.getElementById('metaBar').innerHTML = `
-    <div>TARGET <span>${safe(meta.url)}</span></div>
-    <div>SCANNED <span>${safe(meta.timestamp)}</span></div>
-    <div>DURATION <span>${safe(meta.duration)}s</span></div>
+    <div>TARGET <span>${escapeHtml(meta.url)}</span></div>
+    <div>SCANNED <span>${escapeHtml(meta.timestamp)}</span></div>
+    <div>DURATION <span>${escapeHtml(meta.duration)}s</span></div>
     <div>ISSUES <span>${summary.total}</span></div>
   `;
 
@@ -118,17 +123,22 @@ function renderFindings(list) {
       </div>`;
     return;
   }
-  container.innerHTML = list.map(f => `
-    <div class="finding-row">
-      <div class="sev-badge sev-${f.severity}">${f.severity}</div>
-      <div>
-        <div class="finding-type">${f.type}</div>
-        <div class="finding-detail">${f.detail}</div>
-        <div class="finding-location">${f.location}</div>
+  container.innerHTML = list.map(f => {
+    const severity = ['critical', 'high', 'medium', 'low'].includes(f.severity)
+      ? f.severity
+      : 'low';
+    return `
+      <div class="finding-row">
+        <div class="sev-badge sev-${severity}">${escapeHtml(f.severity)}</div>
+        <div>
+          <div class="finding-type">${escapeHtml(f.type)}</div>
+          <div class="finding-detail">${escapeHtml(f.detail)}</div>
+          <div class="finding-location">${escapeHtml(f.location)}</div>
+        </div>
+        <div class="finding-payload" title="${escapeHtml(f.payload)}">${escapeHtml(f.payload)}</div>
       </div>
-      <div class="finding-payload" title="${f.payload}">${f.payload}</div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function filterFindings(severity, btn) {

